@@ -1,0 +1,98 @@
+---
+title: "Machine Learning Assignment"
+author: "Carl McQueen"
+date: "November 22, 2014"
+output: html_document
+---
+
+This is the final assignment of the Machine Learning Coursera Course.  The goal is to predict 'classe' from a motion dataset provided using the different machine learning languages used in the course.  For my method I used multiple methods and found RandomForest to be the most accurate in my trials and will report method and finding here.
+
+# Method Used
+First, whether used or not, called the librarys we used in the class to have all the different tools discussed available to me.
+``` {r strip.white=TRUE}
+library(caret)
+## report out language
+library(knitr)
+## data manipulation for modeling used in class examples
+library(Hmisc)
+library(randomForest)
+library(doMC)
+## reproducible research
+set.seed(999)
+```
+
+# Getting and Cleaning Data
+The data, provided by the class, has a lot of clean up that is required.  For example there are multiple columns where all the values are NULL or missing and entirely unused as well as features not needed for the model like user.  These all must be removed to speed up and increase accuracy.
+
+```{r}
+## gather the data
+motionTrain <- read.csv("pml-training.csv", na.strings=c(".", "NA", "", "?"), strip.white=TRUE, encoding="UTF-8")
+motionTest <- read.csv("pml-testing.csv", na.strings=c(".", "NA", "", "?"), strip.white=TRUE, encoding="UTF-8")
+## choose columns to use, reduction of noise
+## function: create a function to reduce the noise since there are two datasets that need to be identical
+noiseReduction <- function(dataset) {
+  # collect those that aren't all null
+  survivors <- !sapply(dataset, function(x) any(is.na(x)))
+  # reform the dataset with only those without NAs
+  dataset <- dataset[, survivors]
+  # reform the dataset to remove blanks
+  survivors <- !sapply(dataset, function(x) any(x==""))
+  dataset <- dataset[, survivors] 
+  # Also: for fields with values that don't matter:
+  removal <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+              "cvtd_timestamp", "new_window", "num_window")
+  trimmed <- which(colnames(dataset) %in% removal)
+  dataset <- dataset[, -trimmed]
+  
+  return(dataset)
+}
+## reduce the training set, change 'classe' to a factor
+motionTrain <- noiseReduction(motionTrain)
+motionTrain$classe <- factor(motionTrain$classe)
+## reduce the testing set
+motionTest <- noiseReduction(motionTest)
+registerDoMC(cores=4)
+```
+
+# Data Analysis - Machine Learning
+I tried several different machine learning methods that we learned about.  GLM, Naive Bayes, Random Forest and KVM are just a few that I ran.  I found that RandomForest had the best results so I have displayed them, and their method here:
+
+```{r cache=TRUE}
+## The Assignment calls for cross-validation as the method to check, so we will set up some cross validations
+motionControl <- trainControl(method="cv",number = 5, allowParallel = TRUE, verboseIter = TRUE)
+## some of the methods we looked in the class was Random Forest; this takes quite a bit of time
+motionRF <- train(classe ~ ., data = motionTrain, method = "rf", trControl = motionControl)
+## grab the accuracy from the Random Forest Test run above
+accuracy <- data.frame(Model=c("Random Forest"),Accuracy=c(round(max(head(motionRF$results)$Accuracy), 3)))
+## make a table using knitr to show the results:
+kable(accuracy)
+## now for testing againts the test
+testResults <- predict(motionRF, motionTest)
+answers <- testResults
+```
+
+Accuracy is reported at 99% which is satisfactory, but we should also look at which ones had trouble.
+
+```{r}
+ motionRF$finalModel
+```
+
+The error rate is .4% which is good enough and we see the errors are spread out but mainly concentrated on B and C.  With the error rate so low we don't need to investiage more.  Finally we use the code provided by the class to make the answers into files and test against the test set.  I felt confident all 20 would be correct and after submission found them all to be so.  So I was satisfied with the results.
+
+```{r}
+####################################
+## CODE FROM PROFESSOR / CLASS #####
+####################################
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+## generate the answers
+pml_write_files(answers)
+```
+
+# final thoughts
+RandomForest turned out to be a great method of identifying the classe of motion used in the motion readers.  It provided a clear picture and a successful result.  Randomforest, even with a 20k row data set takes quite a bit of time and resources to run however, so it is important to use the tool when you feel confident with your variables are predictors rather than as a test method.
